@@ -1,0 +1,23 @@
+{
+  "name": "ai-sql-optimizer",
+  "version": "1.0.0",
+  "description": "A CLI tool to optimize SQL queries using AI",
+  "main": "src/index.js",
+  "bin": {
+    "ai-sql-opt": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "keywords": [
+    "sql",
+    "ai",
+    "optimizer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "openai": "^6.34.0"
+  }
+}
