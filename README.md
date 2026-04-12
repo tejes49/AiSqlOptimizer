@@ -1,6 +1,6 @@
 # AI SQL Optimizer 🚀
 
-> An intelligent Node.js library and CLI tool that leverages OpenAI to analyze, refactor, and index your SQL queries.
+> An intelligent Node.js library and CLI tool that leverages Gemini to analyze, refactor, and index your SQL queries.
 
 `ai-sql-optimizer` acts as your personal AI Database Administrator. By integrating seamlessly into your CLI or directly into your Node.js application, it detects anti-patterns, suggests schema indexes, and rewrites your raw SQL queries for maximum performance.
 
@@ -8,7 +8,7 @@
 
 - **CLI Support**: Seamlessly optimize query strings instantly via your terminal.
 - **Node.js Integration**: Built as a standard CommonJS module so you can script query performance testing programmatically.
-- **OpenAI Powered**: Uses the official OpenAI JavaScript SDK and modern models to safely analyze execution paths.
+- **Gemini Powered**: Uses the official Google Generative AI JavaScript SDK and modern models to safely analyze execution paths.
 - **Strict Formatting**: Automatically breaks down outputs into the optimized query, index suggestions, and exact technical explanations.
 
 ## 📦 Installation
@@ -25,7 +25,7 @@ npm install ai-sql-optimizer
 
 ## ⚙️ Configuration
 
-To run this tool, you will need to provide your OpenAI API key using environment variables. This project uses the `dotenv` package to securely load variables from a `.env` file into Node.js.
+To run this tool, you will need to provide your Gemini API key using environment variables. This project uses the `dotenv` package to securely load variables from a `.env` file into Node.js.
 
 1. In the root of your project, clone the example env:
    ```bash
@@ -33,14 +33,14 @@ To run this tool, you will need to provide your OpenAI API key using environment
    ```
 2. Open the newly created `.env` file and configure your API key:
    ```env
-   OPENAI_API_KEY=sk-your-real-api-key-here
+   GEMINI_API_KEY=sk-your-real-api-key-here
    ```
 
 ### Using `dotenv` in Node.js
 
 We make API authentication a breeze. The `dotenv` package is automatically initialized at the top of our module via `require('dotenv').config()`. 
 
-This reads your `.env` file and securely binds your authentication key to Node's `process.env.OPENAI_API_KEY`. Behind the scenes, the OpenAI Client natively uses this variable, eliminating any need to hardcode tokens.
+This reads your `.env` file and securely binds your authentication key to Node's `process.env.GEMINI_API_KEY`. Behind the scenes, the Gemini Client natively uses this variable, eliminating any need to hardcode tokens.
 
 ## 💻 Usage
 
@@ -99,7 +99,7 @@ Refactoring the `OR` statements into an `IN` clause provides the database planne
 
 ## 🔮 Future Improvements
 
-- [ ] Provide configurable OpenAI models and temperature settings via CLI flags (e.g. `--model=gpt-4o`).
+- [ ] Provide configurable Gemini models and temperature settings via CLI flags.
 - [ ] Add support for alternative AI providers like Anthropic Claude.
 - [ ] Introduce schema integrations so the AI can analyze database layouts and exact types, not just the raw SQL.
 - [ ] Integrate with popular ORM logging tools natively.

@@ -1,10 +1,45 @@
 require('dotenv').config();
-const { OpenAI } = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { buildPrompt } = require('./prompt');
 const { runRuleBasedOptimization } = require('./rules');
 
-// Initialize the OpenAI client
-const openai = new OpenAI();
+let genAI; // Lazy initialization
+
+/**
+ * Cleans the AI response string by removing markdown blocks and trimming.
+ * @param {string} text - Raw response text.
+ * @returns {string} - Cleaned text.
+ */
+function cleanAIResponse(text) {
+    if (!text) return '';
+    let curr = text.trim();
+    if (curr.startsWith('```json')) {
+        curr = curr.substring(7);
+    } else if (curr.startsWith('```')) {
+        curr = curr.substring(3);
+    }
+    if (curr.endsWith('```')) {
+        curr = curr.substring(0, curr.length - 3);
+    }
+    return curr.trim();
+}
+
+/**
+ * Returns a properly initialized Gemini model with given name.
+ * @param {string} modelName - The model identifier to use.
+ * @returns {Object} - The configured Gemini model.
+ */
+function getGeminiModel(modelName = 'gemini-1.5-flash') {
+    if (!genAI) {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            throw new Error('Error: Missing credentials. Please set the GEMINI_API_KEY environment variable in a .env file or system environment variables.');
+        }
+        genAI = new GoogleGenerativeAI(apiKey);
+    }
+    const systemInstruction = 'You are an advanced SQL database AI assistant. You output valid JSON only.';
+    return genAI.getGenerativeModel({ model: modelName, systemInstruction });
+}
 
 /**
  * Optimizes the given SQL query using a hybrid rule-based and AI approach.
@@ -16,61 +51,69 @@ async function optimizeQuery(query) {
         throw new Error('Invalid query input. Please provide a valid SQL query string.');
     }
 
-    try {
-        // 1. Run static rules
-        const ruleSuggestions = runRuleBasedOptimization(query);
+    // 1. Run static rules
+    const ruleSuggestions = runRuleBasedOptimization(query);
 
-        // 2. Run AI generation
-        const promptText = buildPrompt(query);
+    // 2. Run AI generation
+    const promptText = buildPrompt(query);
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            response_format: { type: "json_object" }, // Enforce JSON Output via API
-            messages: [
-                { role: 'system', content: 'You are an advanced SQL database AI assistant. You output valid JSON only.' },
-                { role: 'user', content: promptText }
-            ],
-            temperature: 0.1, 
-        });
+    const fallbackModelName = 'gemini-1.5-pro';
+    const modelsToTry = ['gemini-1.5-flash', fallbackModelName];
+    
+    let aiParsed = null;
+    let lastError = null;
+    let success = false;
 
-        if (!response.choices || response.choices.length === 0 || !response.choices[0].message) {
-            throw new Error('Invalid or empty response returned from the OpenAI API.');
-        }
-
-        const aiResponseText = response.choices[0].message.content;
-        
-        let aiParsed;
+    for (let currentModel of modelsToTry) {
         try {
-            aiParsed = JSON.parse(aiResponseText);
-        } catch (parseError) {
-            throw new Error(`Failed to parse AI response as JSON: ${parseError.message}`);
-        }
-
-        // 3. Merge outputs transparently 
-        // We prepend the local static rule checks to the AI's suggestions array
-        if (ruleSuggestions.length > 0) {
-            if (!Array.isArray(aiParsed.suggestions)) {
-                aiParsed.suggestions = [];
+            const model = getGeminiModel(currentModel);
+            const result = await model.generateContent(promptText);
+            const aiResponseText = result.response.text();
+            
+            if (!aiResponseText) {
+                throw new Error('Empty response returned from the Gemini API.');
             }
-            aiParsed.suggestions = [...ruleSuggestions.map(msg => `[Static Rule] ${msg}`), ...aiParsed.suggestions];
-        }
 
-        // Enforce the data format matches the requested schema fully
-        return {
-            optimizedQuery: aiParsed.optimizedQuery || query,
-            suggestions: Array.isArray(aiParsed.suggestions) ? aiParsed.suggestions : [],
-            explanation: aiParsed.explanation || "No explanation provided."
-        };
-
-    } catch (error) {
-        if (error instanceof OpenAI.APIError) {
-            throw new Error(`OpenAI API Error (${error.status}): ${error.message}`);
-        } else {
-            throw new Error(`Optimization Error: ${error.message}`);
+            const cleanedText = cleanAIResponse(aiResponseText);
+            
+            aiParsed = JSON.parse(cleanedText);
+            
+            success = true;
+            break; // Succeeded, exit loop
+        } catch (error) {
+            lastError = error;
+            // Check if it's a 404 or empty response error implicitly caught here, let it retry with fallback.
+            // Specific string matching isn't strictly necessary since we fallback on any fatal error like parsing or 404.
+            const isModelNotFoundError = error.message && error.message.includes('404');
+            const isEmptyResponse = error.message && error.message.includes('Empty response');
+            
+            // If it's the last standard model fallback iteration, or an explicitly un-recoverable error, we could break.
+            // But for safety and maximum robustness against changing model availability, we log and retry the next model.
         }
     }
+
+    if (!success) {
+        throw new Error(`Optimization Error after retries: ${lastError?.message || 'Unknown error occurred'}`);
+    }
+
+    // 3. Merge outputs transparently 
+    if (ruleSuggestions.length > 0) {
+        if (!aiParsed || !Array.isArray(aiParsed.suggestions)) {
+            aiParsed = aiParsed || {};
+            aiParsed.suggestions = [];
+        }
+        aiParsed.suggestions = [...ruleSuggestions.map(msg => `[Static Rule] ${msg}`), ...aiParsed.suggestions];
+    }
+
+    return {
+        optimizedQuery: aiParsed?.optimizedQuery || query,
+        suggestions: Array.isArray(aiParsed?.suggestions) ? aiParsed.suggestions : [],
+        explanation: aiParsed?.explanation || "No explanation provided."
+    };
 }
 
 module.exports = {
-    optimizeQuery
+    optimizeQuery,
+    cleanAIResponse,
+    getGeminiModel
 };
