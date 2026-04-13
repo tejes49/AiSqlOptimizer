@@ -1,15 +1,15 @@
 # AI SQL Optimizer 🚀
 
-> An intelligent Node.js library and CLI tool that leverages Gemini to analyze, refactor, and index your SQL queries.
+> An intelligent Node.js library and CLI tool that leverages Groq and Llama 3 to analyze, refactor, and index your SQL queries at lightning speed.
 
-`ai-sql-optimizer` acts as your personal AI Database Administrator. By integrating seamlessly into your CLI or directly into your Node.js application, it detects anti-patterns, suggests schema indexes, and rewrites your raw SQL queries for maximum performance.
+`ai-sql-optimizer` acts as your personal AI Database Administrator. By integrating seamlessly into your CLI or directly into your Node.js application, it detects anti-patterns, suggests intelligent schema indexes, and rewrites your raw SQL queries for maximum performance.
 
 ## 🌟 Features
 
 - **CLI Support**: Seamlessly optimize query strings instantly via your terminal.
 - **Node.js Integration**: Built as a standard CommonJS module so you can script query performance testing programmatically.
-- **Gemini Powered**: Uses the official Google Generative AI JavaScript SDK and modern models to safely analyze execution paths.
-- **Strict Formatting**: Automatically breaks down outputs into the optimized query, index suggestions, and exact technical explanations.
+- **Groq Powered**: Uses the official `openai` SDK pointing to Groq's API for blazing-fast inference using the `llama-3.1-8b-instant` model.
+- **Strict Formatting**: Automatically breaks down outputs into the optimized query, safe index suggestions, and exact technical explanations using strictly enforced valid JSON.
 
 ## 📦 Installation
 
@@ -25,7 +25,7 @@ npm install ai-sql-optimizer
 
 ## ⚙️ Configuration
 
-To run this tool, you will need to provide your Gemini API key using environment variables. This project uses the `dotenv` package to securely load variables from a `.env` file into Node.js.
+To run this tool, you will need to provide your Groq API key using environment variables. This project uses the `dotenv` package to securely load variables from a `.env` file into Node.js.
 
 1. In the root of your project, clone the example env:
    ```bash
@@ -33,14 +33,14 @@ To run this tool, you will need to provide your Gemini API key using environment
    ```
 2. Open the newly created `.env` file and configure your API key:
    ```env
-   GEMINI_API_KEY=sk-your-real-api-key-here
+   GROQ_API_KEY=gsk_your-real-api-key-here
    ```
 
 ### Using `dotenv` in Node.js
 
 We make API authentication a breeze. The `dotenv` package is automatically initialized at the top of our module via `require('dotenv').config()`. 
 
-This reads your `.env` file and securely binds your authentication key to Node's `process.env.GEMINI_API_KEY`. Behind the scenes, the Gemini Client natively uses this variable, eliminating any need to hardcode tokens.
+This reads your `.env` file and securely binds your authentication key to Node's `process.env.GROQ_API_KEY`. Behind the scenes, the OpenAI compatibility client natively uses this variable to hit the Groq infrastructure, eliminating any need to hardcode tokens.
 
 ## 💻 Usage
 
@@ -75,32 +75,30 @@ testPerformance();
 
 ### Input
 ```bash
-ai-sql-opt "SELECT * FROM Customers WHERE Country = 'USA' OR Country = 'Canada';"
+ai-sql-opt "SELECT * FROM Customers"
 ```
 
 ### Output
 ```text
 --- Original Query ---
-SELECT * FROM Customers WHERE Country = 'USA' OR Country = 'Canada';
+SELECT * FROM Customers
 
 Optimizing...
 
---- AI Response ---
-Optimized Query:
-SELECT customer_id, name, email FROM Customers WHERE Country IN ('USA', 'Canada');
-
-Suggestions:
-- Consider adding a standard B-tree index on the `Country` column if this filter is executed frequently.
-- Avoid Using `SELECT *`. Extract exactly what you need.
-
-Explanation:
-Refactoring the `OR` statements into an `IN` clause provides the database planner with a cleaner list of values. Avoiding the wildcard `SELECT` reduces network IO and memory footprint.
+{
+  "optimizedQuery": "SELECT id, name, email FROM Customers",
+  "suggestions": [
+     "[Static Rule] Detected 'SELECT *'. Avoid this in production as it increases network IO; always specify exact columns.",
+     "Consider adding a WHERE clause before indexing for better performance tuning",
+     "Consider indexing columns that are frequently used in WHERE or JOIN conditions"
+  ],
+  "explanation": "Replacing 'SELECT *' with explicit columns prevents over-fetching. We avoided suggesting exact index columns since the query lacks WHERE or JOIN predicates."
+}
 ```
 
 ## 🔮 Future Improvements
 
-- [ ] Provide configurable Gemini models and temperature settings via CLI flags.
-- [ ] Add support for alternative AI providers like Anthropic Claude.
+- [ ] Provide configurable Groq models and temperature settings via CLI flags.
 - [ ] Introduce schema integrations so the AI can analyze database layouts and exact types, not just the raw SQL.
 - [ ] Integrate with popular ORM logging tools natively.
 
