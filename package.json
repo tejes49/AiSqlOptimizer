@@ -1,6 +1,6 @@
 {
   "name": "ai-sql-optimizer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A CLI tool to optimize SQL queries using AI",
   "main": "src/index.js",
   "bin": {
@@ -17,7 +17,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "openai": "^6.34.0"
   }
 }

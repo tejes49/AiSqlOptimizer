@@ -1,9 +1,9 @@
 require('dotenv').config();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require("openai");
 const { buildPrompt } = require('./prompt');
 const { runRuleBasedOptimization } = require('./rules');
 
-let genAI; // Lazy initialization
+let client; // Lazy initialization
 
 /**
  * Cleans the AI response string by removing markdown blocks and trimming.
@@ -25,20 +25,21 @@ function cleanAIResponse(text) {
 }
 
 /**
- * Returns a properly initialized Gemini model with given name.
- * @param {string} modelName - The model identifier to use.
- * @returns {Object} - The configured Gemini model.
+ * Returns a properly initialized OpenAI client configured for Groq.
+ * @returns {Object} - The configured OpenAI client.
  */
-function getGeminiModel(modelName = 'gemini-1.5-flash') {
-    if (!genAI) {
-        const apiKey = process.env.GEMINI_API_KEY;
+function getOpenAIClient() {
+    if (!client) {
+        const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
-            throw new Error('Error: Missing credentials. Please set the GEMINI_API_KEY environment variable in a .env file or system environment variables.');
+            throw new Error('Error: Missing credentials. Please set the GROQ_API_KEY environment variable in a .env file or system environment variables.');
         }
-        genAI = new GoogleGenerativeAI(apiKey);
+        client = new OpenAI({
+            apiKey: apiKey,
+            baseURL: "https://api.groq.com/openai/v1"
+        });
     }
-    const systemInstruction = 'You are an advanced SQL database AI assistant. You output valid JSON only.';
-    return genAI.getGenerativeModel({ model: modelName, systemInstruction });
+    return client;
 }
 
 /**
@@ -57,63 +58,59 @@ async function optimizeQuery(query) {
     // 2. Run AI generation
     const promptText = buildPrompt(query);
 
-    const fallbackModelName = 'gemini-1.5-pro';
-    const modelsToTry = ['gemini-1.5-flash', fallbackModelName];
-    
-    let aiParsed = null;
-    let lastError = null;
-    let success = false;
+    try {
+        const openaiClient = getOpenAIClient();
+        const response = await openaiClient.chat.completions.create({
+            model: "llama-3.1-8b-instant",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a SQL optimization expert. Return only valid JSON."
+                },
+                {
+                    role: "user",
+                    content: promptText
+                }
+            ],
+            temperature: 0.2
+        });
+        
+        const aiResponseText = response.choices[0]?.message?.content;
+        
+        if (!aiResponseText) {
+            throw new Error('Empty response returned from the Groq API.');
+        }
 
-    for (let currentModel of modelsToTry) {
-        try {
-            const model = getGeminiModel(currentModel);
-            const result = await model.generateContent(promptText);
-            const aiResponseText = result.response.text();
-            
-            if (!aiResponseText) {
-                throw new Error('Empty response returned from the Gemini API.');
+        const cleanedText = cleanAIResponse(aiResponseText);
+        
+        const aiParsed = JSON.parse(cleanedText);
+        
+        // 3. Merge outputs transparently 
+        if (ruleSuggestions.length > 0) {
+            if (!aiParsed || !Array.isArray(aiParsed.suggestions)) {
+                aiParsed = aiParsed || {};
+                aiParsed.suggestions = [];
             }
-
-            const cleanedText = cleanAIResponse(aiResponseText);
-            
-            aiParsed = JSON.parse(cleanedText);
-            
-            success = true;
-            break; // Succeeded, exit loop
-        } catch (error) {
-            lastError = error;
-            // Check if it's a 404 or empty response error implicitly caught here, let it retry with fallback.
-            // Specific string matching isn't strictly necessary since we fallback on any fatal error like parsing or 404.
-            const isModelNotFoundError = error.message && error.message.includes('404');
-            const isEmptyResponse = error.message && error.message.includes('Empty response');
-            
-            // If it's the last standard model fallback iteration, or an explicitly un-recoverable error, we could break.
-            // But for safety and maximum robustness against changing model availability, we log and retry the next model.
+            aiParsed.suggestions = [...ruleSuggestions.map(msg => `[Static Rule] ${msg}`), ...aiParsed.suggestions];
         }
-    }
 
-    if (!success) {
-        throw new Error(`Optimization Error after retries: ${lastError?.message || 'Unknown error occurred'}`);
+        return {
+            optimizedQuery: aiParsed?.optimizedQuery || query,
+            suggestions: Array.isArray(aiParsed?.suggestions) ? aiParsed.suggestions : [],
+            explanation: aiParsed?.explanation || "No explanation provided."
+        };
+    } catch (error) {
+        console.warn(`Optimization API Error: ${error.message || 'Unknown error occurred'}. Falling back to rule-based optimization.`);
+        return {
+            optimizedQuery: query,
+            suggestions: ruleSuggestions,
+            explanation: "Using rule-based optimization (AI unavailable)"
+        };
     }
-
-    // 3. Merge outputs transparently 
-    if (ruleSuggestions.length > 0) {
-        if (!aiParsed || !Array.isArray(aiParsed.suggestions)) {
-            aiParsed = aiParsed || {};
-            aiParsed.suggestions = [];
-        }
-        aiParsed.suggestions = [...ruleSuggestions.map(msg => `[Static Rule] ${msg}`), ...aiParsed.suggestions];
-    }
-
-    return {
-        optimizedQuery: aiParsed?.optimizedQuery || query,
-        suggestions: Array.isArray(aiParsed?.suggestions) ? aiParsed.suggestions : [],
-        explanation: aiParsed?.explanation || "No explanation provided."
-    };
 }
 
 module.exports = {
     optimizeQuery,
     cleanAIResponse,
-    getGeminiModel
+    getOpenAIClient
 };
